@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geospatial Day 1 — Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #fafaf9;
+      --card: #ffffff;
+      --border: #e7e5e4;
+      --text: #1c1917;
+      --text-muted: #57534e;
+      --primary: #0d9488;
+      --primary-light: #ccfbf1;
+      --accent: #d97706;
+      --accent-light: #fef3c7;
+      --success: #15803d;
+      --success-light: #dcfce7;
+      --shadow: 0 1px 3px rgba(0,0,0,.08);
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    header {
+      background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+      color: #fff;
+      padding: 1.25rem 1.5rem;
+      border-radius: var(--radius);
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+    header h1 { margin: 0 0 0.25rem 0; font-size: 1.5rem; font-weight: 600; }
+    header p { margin: 0; opacity: .95; font-size: 0.9rem; }
+    .goal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+    .goal strong { color: var(--text); }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .metric {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+    .metric .label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.35rem; }
+    .metric .value { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+    .metric .unit { font-size: 0.85rem; color: var(--text-muted); }
+    .metric.primary .value { color: var(--primary); }
+    .metric.accent .value { color: var(--accent); }
+    .metric.success .value { color: var(--success); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { margin: 0 0 1rem 0; font-size: 1.1rem; font-weight: 600; color: var(--text); }
+    #map { height: 320px; border-radius: 8px; }
+    .ops {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .btn {
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: transform .05s, box-shadow .15s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { box-shadow: 0 2px 8px rgba(13,148,136,.35); }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover { box-shadow: 0 2px 8px rgba(217,119,6,.35); }
+    .btn-outline { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { background: var(--bg); }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--text);
+      color: #fff;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      z-index: 1000;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity .2s, transform .2s;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .locations-list { list-style: none; padding: 0; margin: 0; }
+    .locations-list li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .locations-list li:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Geospatial Data Warehouse — geospatial_day1</h1>
+      <p>PostGIS spatial types, coordinates, and distance metrics</p>
+    </header>
+
+    <section class="goal">
+      <strong>Project goal:</strong> Demonstrate how PostGIS stores locations (GEOMETRY and GEOGRAPHY) and computes real-world distances (planar vs spherical). This dashboard shows live data from the warehouse and lets you add locations to see metrics update in real time.
+    </section>
+
+    <div class="metrics">
+      <div class="metric success">
+        <div class="label">Total locations</div>
+        <div class="value" id="metric-count">—</div>
+        <div class="unit">points</div>
+      </div>
+      <div class="metric primary">
+        <div class="label">SF → New York</div>
+        <div class="value" id="metric-sfny">—</div>
+        <div class="unit">km (spherical)</div>
+      </div>
+      <div class="metric accent">
+        <div class="label">London → Paris</div>
+        <div class="value" id="metric-londonparis">—</div>
+        <div class="unit">km (spherical)</div>
+      </div>
+    </div>
+
+    <div class="ops">
+      <button class="btn btn-primary" id="btn-refresh">Refresh metrics</button>
+      <button class="btn btn-accent" id="btn-add-tokyo">Add Tokyo Tower</button>
+      <button class="btn btn-outline" id="btn-reset">Reset to 4 locations</button>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Distance comparison (km)</h2>
+        <canvas id="chart-distances" height="220"></canvas>
+      </div>
+      <div class="card">
+        <h2>Locations on map</h2>
+        <div id="map"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Locations in database</h2>
+      <ul class="locations-list" id="locations-list"></ul>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = '';
+    let chart = null;
+    let map = null;
+    let markersLayer = null;
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2500);
+    }
+
+    async function fetchJSON(path) {
+      const r = await fetch(API + path);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    async function loadStats() {
+      const s = await fetchJSON('/api/stats');
+      document.getElementById('metric-count').textContent = s.totalLocations;
+      document.getElementById('metric-sfny').textContent = (s.sfNyMeters / 1000).toFixed(1);
+      document.getElementById('metric-londonparis').textContent = (s.londonParisMeters / 1000).toFixed(1);
+      return s;
+    }
+
+    async function loadDistances() {
+      const rows = await fetchJSON('/api/distances');
+      const labels = rows.map(r => r.label);
+      const data = rows.map(r => (parseFloat(r.meters) / 1000).toFixed(1));
+      if (chart) {
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = data;
+        chart.update();
+      } else {
+        const ctx = document.getElementById('chart-distances').getContext('2d');
+        chart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Distance (km)',
+              data,
+              backgroundColor: ['#0d9488', '#d97706'],
+              borderRadius: 8,
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, grid: { color: '#e7e5e4' }, ticks: { color: '#57534e' } },
+              x: { grid: { display: false }, ticks: { color: '#57534e', maxRotation: 25 } }
+            }
+          }
+        });
+      }
+      return rows;
+    }
+
+    async function loadLocations() {
+      const list = await fetchJSON('/api/locations');
+      document.getElementById('locations-list').innerHTML = list
+        .map(l => `<li><strong>${l.name}</strong> — ${parseFloat(l.lat).toFixed(4)}°, ${parseFloat(l.lon).toFixed(4)}°</li>`)
+        .join('');
+      if (!map) {
+        map = L.map('map').setView([30, 0], 2);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; OpenStreetMap, CARTO'
+        }).addTo(map);
+        markersLayer = L.layerGroup().addTo(map);
+      }
+      markersLayer.clearLayers();
+      list.forEach(l => {
+        L.marker([parseFloat(l.lat), parseFloat(l.lon)])
+          .bindPopup(l.name)
+          .addTo(markersLayer);
+      });
+      return list;
+    }
+
+    async function refreshAll() {
+      try {
+        await Promise.all([loadStats(), loadDistances(), loadLocations()]);
+        showToast('Metrics updated.');
+      } catch (e) {
+        showToast('Error: ' + e.message);
+      }
+    }
+
+    document.getElementById('btn-refresh').addEventListener('click', async () => {
+      document.getElementById('btn-refresh').disabled = true;
+      await refreshAll();
+      document.getElementById('btn-refresh').disabled = false;
+    });
+
+    document.getElementById('btn-add-tokyo').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-add-tokyo');
+      btn.disabled = true;
+      try {
+        const r = await fetch(API + '/api/add-location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Tokyo Tower', lon: 139.7454, lat: 35.6586 })
+        }).then(res => res.json());
+        if (r.error) throw new Error(r.error);
+        showToast('Tokyo Tower added. Refreshing…');
+        await refreshAll();
+      } catch (e) {
+        showToast('Error: ' + e.message);
+      }
+      btn.disabled = false;
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-reset');
+      btn.disabled = true;
+      try {
+        const r = await fetch(API + '/api/reset-locations', { method: 'POST' }).then(res => res.json());
+        if (r.error) throw new Error(r.error);
+        showToast('Reset to 4 locations.');
+        await refreshAll();
+      } catch (e) {
+        showToast('Error: ' + e.message);
+      }
+      btn.disabled = false;
+    });
+
+    refreshAll();
+  </script>
+</body>
+</html>

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geospatial Day 2 — Memory Management Dashboard</title>
+  <style>
+    :root {
+      --bg: #fafaf9;
+      --card: #ffffff;
+      --border: #e7e5e4;
+      --text: #1c1917;
+      --text-muted: #57534e;
+      --primary: #0d9488;
+      --accent: #d97706;
+      --success: #15803d;
+      --shadow: 0 1px 3px rgba(0,0,0,.08);
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    header {
+      background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+      color: #fff; padding: 1.25rem 1.5rem; border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow);
+    }
+    header h1 { margin: 0 0 0.25rem 0; font-size: 1.5rem; font-weight: 600; }
+    header p { margin: 0; opacity: .95; font-size: 0.9rem; }
+    .goal {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.95rem; color: var(--text-muted);
+    }
+    .goal strong { color: var(--text); }
+    .metrics {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;
+    }
+    .metric {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.25rem; box-shadow: var(--shadow);
+    }
+    .metric .label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.35rem; }
+    .metric .value { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+    .metric .unit { font-size: 0.85rem; color: var(--text-muted); }
+    .metric.primary .value { color: var(--primary); }
+    .metric.accent .value { color: var(--accent); }
+    .metric.success .value { color: var(--success); }
+    .ops-section { margin-bottom: 1.5rem; }
+    .ops-section h2 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 0 0 0.75rem 0; }
+    .ops-section p.desc { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 0.5rem 0; }
+    .ops { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    .btn {
+      padding: 0.6rem 1rem; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 500;
+      cursor: pointer; transition: transform .05s, box-shadow .15s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-outline { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.25rem; box-shadow: var(--shadow); margin-bottom: 1.5rem;
+    }
+    .card h2 { margin: 0 0 1rem 0; font-size: 1.1rem; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-muted); font-weight: 600; }
+    .last-action {
+      background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius);
+      padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: #166534;
+    }
+    .last-action.empty { background: #f5f5f4; border-color: var(--border); color: var(--text-muted); }
+    .toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.75rem 1.25rem;
+      background: var(--text); color: #fff; border-radius: 8px; font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 1000; opacity: 0; transform: translateY(10px); transition: opacity .2s, transform .2s;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Geospatial Day 2 — Memory Management</h1>
+      <p>See how work_mem, data, and spatial queries affect metrics. Use the operations below; every action refreshes all metrics.</p>
+    </header>
+    <section class="goal">
+      <strong>What this dashboard does:</strong> It shows live database metrics (work_mem, row counts, last demo execution time). Each operation runs something on the database; after every operation we refresh all metrics so you see work_mem, Places, Regions, and Last demo execution update together. Use "Refresh metrics" anytime to re-fetch current values.
+    </section>
+
+    <div class="metrics">
+      <div class="metric success">
+        <div class="label">work_mem</div>
+        <div class="value" id="metric-workmem">—</div>
+        <div class="unit">current setting</div>
+      </div>
+      <div class="metric success">
+        <div class="label">Places</div>
+        <div class="value" id="metric-places">—</div>
+        <div class="unit">rows</div>
+      </div>
+      <div class="metric success">
+        <div class="label">Regions</div>
+        <div class="value" id="metric-regions">—</div>
+        <div class="unit">rows</div>
+      </div>
+      <div class="metric primary">
+        <div class="label">Last demo execution</div>
+        <div class="value" id="metric-execms">—</div>
+        <div class="unit">ms</div>
+      </div>
+    </div>
+
+    <div class="last-action empty" id="last-action">No action yet. Use an operation below; all metrics will update after each action.</div>
+
+    <div class="ops-section">
+      <h2>1. Read current state</h2>
+      <p class="desc">Fetches work_mem, Places count, Regions count, and last demo result from the database. Use this to see that all four metrics update.</p>
+      <div class="ops">
+        <button class="btn btn-primary" id="btn-refresh">Refresh metrics</button>
+      </div>
+    </div>
+
+    <div class="ops-section">
+      <h2>2. Memory tuning (work_mem)</h2>
+      <p class="desc">Changes PostgreSQL work_mem and reloads config. After clicking, "work_mem" above will update. Try tuned (256MB) then run the demo; then reset to 4MB and run again to compare execution time.</p>
+      <div class="ops">
+        <button class="btn btn-accent" id="btn-workmem-256">Apply tuned work_mem (256MB)</button>
+        <button class="btn btn-outline" id="btn-workmem-4">Reset work_mem to 4MB</button>
+      </div>
+    </div>
+
+    <div class="ops-section">
+      <h2>3. Run spatial demo query</h2>
+      <p class="desc">Runs the query: "places contained in regions" with EXPLAIN ANALYZE. Updates "Last demo execution" (ms) and the result table below. All metrics refresh after this.</p>
+      <div class="ops">
+        <button class="btn btn-primary" id="btn-run-demo">Run demo: places per region</button>
+      </div>
+    </div>
+
+    <div class="ops-section">
+      <h2>4. Data operations</h2>
+      <p class="desc">Add a place or reset to original data. "Places" (and optionally "Regions") count will update; "Last demo execution" and the table update when you run the demo again after reset.</p>
+      <div class="ops">
+        <button class="btn btn-accent" id="btn-add-place">Add sample place (Seattle)</button>
+        <button class="btn btn-outline" id="btn-reset-data">Reset to original data (10 places, 3 regions)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Demo query result (places per region)</h2>
+      <p id="demo-hint" class="text-muted" style="color:var(--text-muted);font-size:0.9rem;">Run "Run demo: places per region" above to see region names, counts, and centroids. This table updates whenever you run the demo and when you refresh metrics.</p>
+      <table id="demo-table" style="display:none;">
+        <thead><tr><th>Region</th><th>Places in region</th><th>Centroid</th></tr></thead>
+        <tbody id="demo-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    const API = '';
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2500);
+    }
+    function setLastAction(msg) {
+      const el = document.getElementById('last-action');
+      el.textContent = msg;
+      el.classList.remove('empty');
+    }
+    async function fetchJSON(path, opts) {
+      const r = await fetch(API + path, opts);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+    async function loadStats() {
+      const s = await fetchJSON('/api/stats');
+      document.getElementById('metric-workmem').textContent = s.workMem;
+      document.getElementById('metric-places').textContent = s.placesCount;
+      document.getElementById('metric-regions').textContent = s.regionsCount;
+      document.getElementById('metric-execms').textContent =
+        s.lastDemoExecutionMs > 0 ? s.lastDemoExecutionMs.toFixed(2) : '—';
+      const tbody = document.getElementById('demo-tbody');
+      const table = document.getElementById('demo-table');
+      const hint = document.getElementById('demo-hint');
+      if (s.demoResults && s.demoResults.length > 0) {
+        hint.style.display = 'none';
+        table.style.display = 'table';
+        tbody.innerHTML = s.demoResults.map(r =>
+          `<tr><td>${r.region_name}</td><td>${r.num_places_in_region}</td><td>${r.aggregated_centroid || '—'}</td></tr>`
+        ).join('');
+      } else {
+        hint.style.display = 'block';
+        table.style.display = 'none';
+      }
+      return s;
+    }
+    async function refreshAll(actionMsg) {
+      try {
+        await loadStats();
+        if (actionMsg) setLastAction(actionMsg);
+        showToast('All metrics updated.');
+      } catch (e) {
+        showToast('Error: ' + e.message);
+      }
+    }
+
+    document.getElementById('btn-refresh').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-refresh');
+      btn.disabled = true;
+      await refreshAll('Refreshed: work_mem, Places, Regions, and last demo result fetched from DB.');
+      btn.disabled = false;
+    });
+
+    document.getElementById('btn-workmem-256').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-workmem-256');
+      btn.disabled = true;
+      try {
+        const r = await fetchJSON('/api/set-work-mem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: '256MB' }) });
+        if (r.error) throw new Error(r.error);
+        setLastAction('work_mem set to 256MB; config reloaded. All metrics refreshed.');
+        await loadStats();
+        showToast(r.message || 'work_mem set to 256MB.');
+      } catch (e) { showToast('Error: ' + e.message); }
+      btn.disabled = false;
+    });
+    document.getElementById('btn-workmem-4').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-workmem-4');
+      btn.disabled = true;
+      try {
+        const r = await fetchJSON('/api/set-work-mem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: '4MB' }) });
+        if (r.error) throw new Error(r.error);
+        setLastAction('work_mem set to 4MB; config reloaded. All metrics refreshed.');
+        await loadStats();
+        showToast(r.message || 'work_mem set to 4MB.');
+      } catch (e) { showToast('Error: ' + e.message); }
+      btn.disabled = false;
+    });
+
+    document.getElementById('btn-run-demo').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-run-demo');
+      btn.disabled = true;
+      try {
+        const r = await fetchJSON('/api/run-demo', { method: 'POST' });
+        setLastAction('Demo ran in ' + r.executionTimeMs.toFixed(2) + ' ms. All metrics (including work_mem, Places, Regions, last execution, table) refreshed.');
+        await loadStats();
+        showToast('Demo ran in ' + r.executionTimeMs.toFixed(2) + ' ms.');
+      } catch (e) { showToast('Error: ' + e.message); }
+      btn.disabled = false;
+    });
+
+    document.getElementById('btn-add-place').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-add-place');
+      btn.disabled = true;
+      try {
+        const r = await fetchJSON('/api/add-place', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Seattle', lon: -122.3321, lat: 47.6062 }) });
+        if (r.error) throw new Error(r.error);
+        setLastAction(r.message + ' All metrics refreshed.');
+        await loadStats();
+        showToast(r.message);
+      } catch (e) { showToast('Error: ' + e.message); }
+      btn.disabled = false;
+    });
+    document.getElementById('btn-reset-data').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-reset-data');
+      btn.disabled = true;
+      try {
+        const r = await fetchJSON('/api/reset-data', { method: 'POST' });
+        if (r.error) throw new Error(r.error);
+        setLastAction('Data reset to 10 places, 3 regions. All metrics refreshed; run the demo again to see execution time.');
+        await loadStats();
+        showToast(r.message);
+      } catch (e) { showToast('Error: ' + e.message); }
+      btn.disabled = false;
+    });
+
+    refreshAll();
+  </script>
+</body>
+</html>

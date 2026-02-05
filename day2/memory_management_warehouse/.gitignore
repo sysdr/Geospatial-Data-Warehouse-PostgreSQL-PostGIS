@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+venv/
+vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*api*key*
+*API*KEY*
+*secret*
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Build and logs
+dist/
+build/
+*.log
+npm-debug.log*
+dashboard.log
+
+# Istio
+*istio*
+*Istio*
+
+# Project-specific
+pgdata/
+postgresql.conf
+init_data.sql
+
+# rr (debug)
+*.rr

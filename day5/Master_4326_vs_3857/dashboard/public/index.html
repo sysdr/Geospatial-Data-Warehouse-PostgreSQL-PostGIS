@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Geospatial Day 5 — SRID 4326 vs 3857 Dashboard</title>
+  <style>
+    :root { --bg: #e8eef5; --card: #fff; --border: #e7e5e4; --text: #1c1917; --text-muted: #57534e; --primary: #2563eb; --success: #15803d; --shadow: 0 1px 3px rgba(0,0,0,.08); --radius: 10px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+    .container { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+    header { background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%); color: #fff; padding: 1.25rem; border-radius: var(--radius); margin-bottom: 1.5rem; }
+    header h1 { margin: 0 0 0.25rem 0; font-size: 1.5rem; }
+    header p { margin: 0; opacity: .95; font-size: 0.9rem; }
+    .goal { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.95rem; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .metric { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+    .metric .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.35rem; }
+    .metric .value { font-size: 1.35rem; font-weight: 700; color: var(--text); }
+    .metric.primary .value { color: var(--primary); }
+    .metric.success .value { color: var(--success); }
+    .btn { padding: 0.6rem 1rem; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 500; cursor: pointer; background: var(--primary); color: #fff; }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.75rem 1.25rem; background: var(--text); color: #fff; border-radius: 8px; font-size: 0.9rem; z-index: 1000; opacity: 0; transition: opacity .2s; }
+    .toast.show { opacity: 1; }
+    .live-badge { font-size: 0.75rem; color: var(--primary); margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Geospatial Day 5 — SRID 4326 vs 3857</h1>
+      <p>Points in locations_4326 (WGS84) and locations_3857 (Web Mercator). Run demo to update all metrics.</p>
+    </header>
+    <section class="goal">
+      <strong>Metrics:</strong> Count 4326, Count 3857, Last demo (ms). Auto-refresh every 2s. Use "Run demo" so values are non-zero.
+    </section>
+    <div class="live-badge">Last updated: <span id="last-updated">—</span></div>
+    <div class="metrics">
+      <div class="metric success"><div class="label">Points (4326)</div><div class="value" id="metric-4326">—</div></div>
+      <div class="metric success"><div class="label">Points (3857)</div><div class="value" id="metric-3857">—</div></div>
+      <div class="metric primary"><div class="label">Last demo</div><div class="value" id="metric-execms">—</div><div class="unit">ms</div></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0;">Actions</h2>
+      <button class="btn" id="btn-refresh">Refresh metrics</button>
+      <button class="btn" id="btn-run-demo">Run demo (init + add points)</button>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    if (window.location.protocol === 'file:') {
+      document.body.innerHTML = '<div style="padding:2rem;font-family:sans-serif;"><h2 style="color:#c00;">Wrong URL</h2><p>Open at <strong>http://localhost:3005/</strong></p></div>';
+    } else {
+    (function() {
+      function showToast(msg) {
+        var el = document.getElementById('toast');
+        if (el) { el.textContent = msg; el.classList.add('show'); setTimeout(function() { el.classList.remove('show'); }, 2500); }
+      }
+      function fetchJSON(path, opts) {
+        var o = Object.assign({ cache: 'no-store' }, opts || {});
+        return fetch(path, o).then(function(r) { if (!r.ok) throw new Error(r.statusText); return r.json(); });
+      }
+      function formatNum(n) {
+        return (n != null && !isNaN(Number(n))) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 }) : '—';
+      }
+      var state = { count4326: null, count3857: null, executionTimeMs: 0, lastUpdated: null };
+      function render() {
+        var el;
+        el = document.getElementById('metric-4326'); if (el) el.textContent = formatNum(state.count4326);
+        el = document.getElementById('metric-3857'); if (el) el.textContent = formatNum(state.count3857);
+        el = document.getElementById('metric-execms'); if (el) el.textContent = (state.executionTimeMs > 0) ? (state.executionTimeMs + ' ms') : '—';
+        el = document.getElementById('last-updated'); if (el) el.textContent = state.lastUpdated ? state.lastUpdated.toLocaleTimeString() : '—';
+      }
+      function setState(next) {
+        if (next.count4326 != null) state.count4326 = next.count4326;
+        if (next.count3857 != null) state.count3857 = next.count3857;
+        var ms = next.executionTimeMs != null ? next.executionTimeMs : next.lastDemoExecutionMs;
+        if (ms != null) state.executionTimeMs = ms;
+        state.lastUpdated = new Date();
+        render();
+      }
+      var LIVE_MS = 2000, liveId = null;
+      function loadStats() {
+        return fetchJSON('/api/stats').then(function(s) {
+          setState({ count4326: s.count4326, count3857: s.count3857, executionTimeMs: s.lastDemoExecutionMs });
+          return s;
+        }).catch(function(e) { console.error('loadStats', e); });
+      }
+      function startLive() { if (!liveId) liveId = setInterval(loadStats, LIVE_MS); }
+      document.getElementById('btn-refresh').addEventListener('click', function() {
+        loadStats().then(function() { showToast('Metrics updated.'); }).catch(function(e) { showToast('Error: ' + (e && e.message)); });
+      });
+      document.getElementById('btn-run-demo').addEventListener('click', function() {
+        var btn = document.getElementById('btn-run-demo');
+        btn.disabled = true;
+        if (liveId) { clearInterval(liveId); liveId = null; }
+        fetchJSON('/api/run-demo', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+          .then(function(r) {
+            setState({ count4326: r.count4326, count3857: r.count3857, executionTimeMs: r.executionTimeMs });
+            showToast('Demo ran in ' + r.executionTimeMs + ' ms.');
+          })
+          .catch(function(e) { showToast('Error: ' + (e && e.message)); })
+          .finally(function() { btn.disabled = false; setTimeout(startLive, 500); });
+      });
+      loadStats().then(startLive).catch(startLive);
+    })();
+    }
+  </script>
+</body>
+</html>

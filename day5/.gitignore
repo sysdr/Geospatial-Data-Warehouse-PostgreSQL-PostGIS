@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+venv/
+vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+*.egg-info/
+
+# Environment and secrets
+.env
+.env.local
+*.pem
+*api*key*
+*API*KEY*
+*secret*
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Build and logs
+*.log
+dashboard.log
+
+# Istio
+*istio*
+
+# Generated project data (created by setup.sh)
+Master_4326_vs_3857/data/pgdata/
+Master_4326_vs_3857/dashboard/node_modules/
+Master_4326_vs_3857/venv/
+Master_4326_vs_3857/dashboard/dashboard.log
+
+# rr debug
+*.rr

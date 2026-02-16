@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  db:
+    image: postgis/postgis:15-3.3 # Using PostGIS 3.3 for PostgreSQL 15, current stable and widely adopted
+    container_name: postgis_day3_db
+    environment:
+      POSTGRES_DB: geospatial_warehouse_day3
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_day3:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d geospatial_warehouse_day3"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata_day3:

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geospatial Day 3 — Spatial Operator Classes Dashboard</title>
+  <style>
+    :root { --bg: #fafaf9; --card: #fff; --border: #e7e5e4; --text: #1c1917; --text-muted: #57534e; --primary: #0d9488; --success: #15803d; --shadow: 0 1px 3px rgba(0,0,0,.08); --radius: 10px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+    .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    header { background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%); color: #fff; padding: 1.25rem; border-radius: var(--radius); margin-bottom: 1.5rem; }
+    header h1 { margin: 0 0 0.25rem 0; font-size: 1.5rem; }
+    header p { margin: 0; opacity: .95; font-size: 0.9rem; }
+    .goal { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.95rem; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .metric { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+    .metric .label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.35rem; }
+    .metric .value { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+    .metric.primary .value { color: var(--primary); }
+    .metric.success .value { color: var(--success); }
+    .btn { padding: 0.6rem 1rem; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 500; cursor: pointer; background: var(--primary); color: #fff; }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.75rem 1.25rem; background: var(--text); color: #fff; border-radius: 8px; font-size: 0.9rem; z-index: 1000; opacity: 0; transition: opacity .2s; }
+    .toast.show { opacity: 1; }
+    .live-badge { font-size: 0.75rem; color: var(--primary); margin-bottom: 0.5rem; }
+    .live-badge span { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Geospatial Day 3 — Spatial Operator Classes</h1>
+      <p>Locations count, GiST index, and buffer-query demo. Run "Run demo" to update last execution time and result table.</p>
+    </header>
+    <section class="goal">
+      <strong>Metrics:</strong> Locations (rows), Points in buffer, Index, Last demo execution (ms). All values auto-refresh every 3 seconds. Use "Run demo" to update buffer results and execution time.
+    </section>
+    <div class="live-badge"><span>Live</span> — Last updated: <span id="last-updated">—</span></div>
+    <div class="metrics">
+      <div class="metric success"><div class="label">Locations</div><div class="value" id="metric-locations">—</div><div class="unit">rows</div></div>
+      <div class="metric success"><div class="label">Points in buffer</div><div class="value" id="metric-points-buffer">—</div><div class="unit">from last demo</div></div>
+      <div class="metric success"><div class="label">Index</div><div class="value" id="metric-index">—</div></div>
+      <div class="metric primary"><div class="label">Last demo execution</div><div class="value" id="metric-execms">—</div><div class="unit">ms</div></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0;">Actions</h2>
+      <button class="btn" id="btn-refresh">Refresh metrics</button>
+      <button class="btn" id="btn-run-demo">Run demo (500m buffer query)</button>
+    </div>
+    <div class="card">
+      <h2>Demo result (points in 500m buffer)</h2>
+      <p id="demo-hint" style="color:var(--text-muted);">Run "Run demo" to see rows. Table updates after demo and refresh.</p>
+      <table id="demo-table" style="display:none;">
+        <thead><tr><th>ID</th><th>Name</th><th>Geometry</th></tr></thead>
+        <tbody id="demo-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    function showToast(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2500); }
+    async function fetchJSON(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+    function formatNum(n) { return (n != null && !isNaN(n)) ? Number(n).toLocaleString() : '—'; }
+    function setLastUpdated() {
+      const el = document.getElementById('last-updated');
+      if (el) el.textContent = new Date().toLocaleTimeString();
+    }
+    async function loadStats() {
+      try {
+        const s = await fetchJSON('/api/stats');
+        document.getElementById('metric-locations').textContent = formatNum(s.locationsCount);
+        document.getElementById('metric-points-buffer').textContent = formatNum(s.pointsInBuffer);
+        document.getElementById('metric-index').textContent = s.indexName || '—';
+        document.getElementById('metric-execms').textContent = s.lastDemoExecutionMs > 0 ? s.lastDemoExecutionMs.toFixed(2) : '—';
+        const tbody = document.getElementById('demo-tbody');
+        const table = document.getElementById('demo-table');
+        const hint = document.getElementById('demo-hint');
+        if (s.demoResults && s.demoResults.length > 0) {
+          hint.style.display = 'none';
+          table.style.display = 'table';
+          tbody.innerHTML = s.demoResults.map(r => '<tr><td>' + r.id + '</td><td>' + (r.name || '') + '</td><td>' + (r.geom_text || '—') + '</td></tr>').join('');
+        } else { hint.style.display = 'block'; table.style.display = 'none'; }
+        setLastUpdated();
+        return s;
+      } catch (e) {
+        console.error('loadStats error', e);
+        return null;
+      }
+    }
+    const LIVE_INTERVAL_MS = 3000;
+    let liveIntervalId = null;
+    function startLiveRefresh() {
+      if (liveIntervalId) return;
+      liveIntervalId = setInterval(() => { loadStats(); }, LIVE_INTERVAL_MS);
+    }
+    function stopLiveRefresh() {
+      if (liveIntervalId) { clearInterval(liveIntervalId); liveIntervalId = null; }
+    }
+    document.getElementById('btn-refresh').addEventListener('click', async () => {
+      try { await loadStats(); showToast('Metrics updated.'); } catch (e) { showToast('Error: ' + e.message); }
+    });
+    document.getElementById('btn-run-demo').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-run-demo');
+      btn.disabled = true;
+      try {
+        const r = await fetchJSON('/api/run-demo', { method: 'POST' });
+        await loadStats();
+        showToast('Demo ran in ' + r.executionTimeMs.toFixed(2) + ' ms.');
+      } catch (e) { showToast('Error: ' + e.message); }
+      btn.disabled = false;
+    });
+    loadStats().then(() => startLiveRefresh());
+    window.addEventListener('beforeunload', stopLiveRefresh);
+  </script>
+</body>
+</html>

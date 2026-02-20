@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Geospatial Day 6 — CTE Materialized Demo Dashboard</title>
+  <style>
+    :root { --bg: #dcf0dd; --card: #fff; --border: #e7e5e4; --text: #1c1917; --text-muted: #57534e; --primary: #2563eb; --success: #15803d; --shadow: 0 1px 3px rgba(0,0,0,.08); --radius: 10px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+    .container { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+    header { background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%); color: #fff; padding: 1.25rem; border-radius: var(--radius); margin-bottom: 1.5rem; }
+    header h1 { margin: 0 0 0.25rem 0; font-size: 1.5rem; }
+    header p { margin: 0; opacity: .95; font-size: 0.9rem; }
+    .goal { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.95rem; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .metric { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+    .metric .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.35rem; }
+    .metric .value { font-size: 1.35rem; font-weight: 700; color: var(--text); }
+    .metric.primary .value { color: var(--primary); }
+    .metric.success .value { color: var(--success); }
+    .btn { padding: 0.6rem 1rem; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 500; cursor: pointer; background: var(--primary); color: #fff; }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.75rem 1.25rem; background: var(--text); color: #fff; border-radius: 8px; font-size: 0.9rem; z-index: 1000; opacity: 0; transition: opacity .2s; }
+    .toast.show { opacity: 1; }
+    .live-badge { font-size: 0.75rem; color: var(--primary); margin-bottom: 0.5rem; }
+    .metric .value.updated { animation: metricFlash 0.4s ease; }
+    @keyframes metricFlash { 0% { background: rgba(37, 99, 235, 0.2); border-radius: 4px; } 100% { background: transparent; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Geospatial Day 6 — CTE Materialized Demo</h1>
+      <p>Regions, sensors, active sensors, and active-in-Region_B (MATERIALIZED CTE). Run demo to update all metrics.</p>
+    </header>
+    <section class="goal">
+      <strong>Metrics:</strong> Regions, Sensors, Active sensors, Active in Region_B (from demo), Last demo (ms). Auto-refresh every 1s. All values update from server on each refresh and when you click "Run demo".
+    </section>
+    <div class="live-badge">Last updated: <span id="last-updated">—</span></div>
+    <div class="metrics">
+      <div class="metric success"><div class="label">Regions</div><div class="value" id="metric-regions">—</div></div>
+      <div class="metric success"><div class="label">Sensors</div><div class="value" id="metric-sensors">—</div></div>
+      <div class="metric success"><div class="label">Active sensors</div><div class="value" id="metric-active">—</div></div>
+      <div class="metric success"><div class="label">Active in Region_B</div><div class="value" id="metric-regionb">—</div></div>
+      <div class="metric primary"><div class="label">Last demo</div><div class="value" id="metric-execms">—</div><div class="unit">ms</div></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0;">Actions</h2>
+      <button class="btn" id="btn-refresh">Refresh metrics</button>
+      <button class="btn" id="btn-run-demo">Run demo (MATERIALIZED CTE query)</button>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    if (window.location.protocol === 'file:') {
+      document.body.innerHTML = '<div style="padding:2rem;font-family:sans-serif;"><h2 style="color:#c00;">Wrong URL</h2><p>Open at <strong>http://localhost:3006/</strong></p></div>';
+    } else {
+    (function() {
+      function showToast(msg) {
+        var el = document.getElementById('toast');
+        if (el) { el.textContent = msg; el.classList.add('show'); setTimeout(function() { el.classList.remove('show'); }, 2500); }
+      }
+      function fetchJSON(path, opts) {
+        var url = path + (path.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
+        var o = Object.assign({ cache: 'no-store', credentials: 'same-origin' }, opts || {});
+        return fetch(url, o).then(function(r) { if (!r.ok) throw new Error(r.statusText); return r.json(); });
+      }
+      function formatNum(n) {
+        return (n != null && !isNaN(Number(n))) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—';
+      }
+      var state = { regionsCount: null, sensorsCount: null, activeSensorsCount: null, activeInRegionB: null, executionTimeMs: 0, lastUpdated: null };
+      function render(flash) {
+        var ids = ['metric-regions', 'metric-sensors', 'metric-active', 'metric-regionb', 'metric-execms'];
+        var values = [
+          formatNum(state.regionsCount),
+          formatNum(state.sensorsCount),
+          formatNum(state.activeSensorsCount),
+          formatNum(state.activeInRegionB),
+          (state.executionTimeMs > 0) ? (state.executionTimeMs + ' ms') : '—'
+        ];
+        for (var i = 0; i < ids.length; i++) {
+          var el = document.getElementById(ids[i]);
+          if (el) {
+            el.textContent = values[i];
+            if (flash) {
+              el.classList.remove('updated');
+              el.offsetHeight;
+              el.classList.add('updated');
+              (function(elem) { setTimeout(function() { elem.classList.remove('updated'); }, 400); })(el);
+            }
+          }
+        }
+        var el = document.getElementById('last-updated');
+        if (el) el.textContent = state.lastUpdated ? state.lastUpdated.toLocaleTimeString() : '—';
+      }
+      function setState(next, flash) {
+        if (next.regionsCount != null) state.regionsCount = next.regionsCount;
+        if (next.sensorsCount != null) state.sensorsCount = next.sensorsCount;
+        if (next.activeSensorsCount != null) state.activeSensorsCount = next.activeSensorsCount;
+        if (next.activeInRegionB != null) state.activeInRegionB = next.activeInRegionB;
+        var ms = next.executionTimeMs != null ? next.executionTimeMs : next.lastDemoExecutionMs;
+        if (ms != null) state.executionTimeMs = ms;
+        state.lastUpdated = new Date();
+        render(flash);
+      }
+      var LIVE_MS = 1000, liveId = null;
+      function loadStats(flash) {
+        return fetchJSON('/api/stats').then(function(s) {
+          setState({
+            regionsCount: s.regionsCount,
+            sensorsCount: s.sensorsCount,
+            activeSensorsCount: s.activeSensorsCount,
+            activeInRegionB: s.activeInRegionB,
+            executionTimeMs: s.lastDemoExecutionMs
+          }, !!flash);
+          return s;
+        }).catch(function(e) {
+          console.error('loadStats', e);
+          state.lastUpdated = new Date();
+          render(false);
+        });
+      }
+      function startLive() {
+        if (liveId) return;
+        liveId = setInterval(function() { loadStats(); }, LIVE_MS);
+      }
+      document.getElementById('btn-refresh').addEventListener('click', function() {
+        loadStats(true).then(function() { showToast('Metrics updated.'); }).catch(function(e) { showToast('Error: ' + (e && e.message)); });
+      });
+      document.getElementById('btn-run-demo').addEventListener('click', function() {
+        var btn = document.getElementById('btn-run-demo');
+        btn.disabled = true;
+        if (liveId) { clearInterval(liveId); liveId = null; }
+        var runDemoUrl = '/api/run-demo?_=' + Date.now();
+        fetch(runDemoUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store' })
+          .then(function(r) { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+          .then(function(r) {
+            setState({
+              regionsCount: r.regionsCount,
+              sensorsCount: r.sensorsCount,
+              activeSensorsCount: r.activeSensorsCount,
+              activeInRegionB: r.activeInRegionB,
+              executionTimeMs: r.executionTimeMs
+            }, true);
+            showToast('Demo ran in ' + r.executionTimeMs + ' ms. All metrics updated.');
+            return loadStats(true);
+          })
+          .catch(function(e) { showToast('Error: ' + (e && e.message)); })
+          .finally(function() { btn.disabled = false; startLive(); });
+      });
+      loadStats().then(startLive).catch(function() { startLive(); });
+    })();
+    }
+  </script>
+</body>
+</html>

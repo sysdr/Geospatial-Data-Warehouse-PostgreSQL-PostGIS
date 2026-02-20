@@ -1,0 +1,32 @@
+:root {
+  --bg: #dcf0dd;
+  --card: #fff;
+  --border: #c8e6c9;
+  --text: #1b5e20;
+  --text-muted: #2e7d32;
+  --primary: #2e7d32;
+  --success: #1b5e20;
+  --shadow: 0 1px 3px rgba(0,0,0,.08);
+  --radius: 10px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+.container { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+header { background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%); color: #fff; padding: 1.25rem; border-radius: var(--radius); margin-bottom: 1.5rem; }
+header h1 { margin: 0 0 0.25rem 0; font-size: 1.5rem; }
+header p { margin: 0; opacity: .95; font-size: 0.9rem; }
+.goal { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.95rem; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.metric { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+.metric .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.35rem; }
+.metric .value { font-size: 1.35rem; font-weight: 700; color: var(--text); }
+.metric.primary .value { color: var(--primary); }
+.metric.success .value { color: var(--success); }
+.btn { padding: 0.6rem 1rem; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 500; cursor: pointer; background: var(--primary); color: #fff; }
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+.toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.75rem 1.25rem; background: var(--text); color: #fff; border-radius: 8px; font-size: 0.9rem; z-index: 1000; opacity: 0; transition: opacity .2s; }
+.toast.show { opacity: 1; }
+.live-badge { font-size: 0.75rem; color: var(--primary); margin-bottom: 0.5rem; }
+.metric .value.updated { animation: metricFlash 0.4s ease; }
+@keyframes metricFlash { 0% { background: rgba(46, 125, 50, 0.2); border-radius: 4px; } 100% { background: transparent; } }
